@@ -1,4 +1,4 @@
-$Id: AUTHORS,v 1.1 2001/12/30 17:16:54 nurgle Exp $
+$Id: AUTHORS,v 1.2 2003/08/24 19:42:18 nurgle Exp $
 
 dsktools developers and contributors
 ====================================
@@ -7,7 +7,7 @@ main programming
 
   Andreas Micklei <nurgle@gmx.de>
 
-various fixes, deleted tracks writing
+various fixes, deleted tracks writing, major parts of dskread
 
   Kevin Thacker <KevinT@Core-Design.com>
 
