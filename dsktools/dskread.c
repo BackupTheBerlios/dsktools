@@ -1,5 +1,5 @@
 /*
- * dskwrite.c - Small utility to write CPC disk images to a floppy disk under
+ * dskread.c - Small utility to read CPC disk images from a floppy disk under
  * Linux with a standard PC FDC.
  * Copyright (C)2001 Andreas Micklei <nurgle@gmx.de>
  *
@@ -17,17 +17,8 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  *
- * V0.0.1 20.6.2001:
- * - first working version
- * V0.0.2 21.6.2001:
- * - added rudimentary support for EDSK images
- * - added command line argument for input file instead of reading stdin
- * V0.0.3 21.12.2001:
- * - merged in changes from Kevin Thacker to handle more copy protection
- *   schemes: - invalid track and head ids in sector headers
- *            - deleted data (untested)
  * V0.0.4 24.12.2001:
- * - moved common types and routines for dskwrite and dskread into common.c
+ * - First version of dskread in dsktools.
  *
  * TODO:
  * - support EDSK properly
@@ -58,111 +49,23 @@
 #include <sys/time.h>
 #include <fcntl.h>
 
-/* notes:
- *
- * the C (track),H (head),R (sector id),N (sector size) parameters in the
- * sector id field do not need to be the same as the physical track and
- * physical side.
- */
-
-void format_track(int fd, int track, Trackinfo *trackinfo) {
-
-	int i, err;
-	struct floppy_raw_cmd raw_cmd;
-	format_map_t data[20];		//FIXME
-	unsigned char mask = 0xFF;
-	Sectorinfo *sectorinfo;
-
-	sectorinfo = trackinfo->sectorinfo;
-	for (i=0; i<trackinfo->spt; i++) {
-		//data[i].sector = 0xC1+i;
-		//data[i].size = 2;	/* 0=128, 1=256, 2=512,... */
-		data[i].sector = sectorinfo->sector;
-		data[i].size = sectorinfo->bps;
-		data[i].cylinder = sectorinfo->track;
-		data[i].head = sectorinfo->head;	
-		sectorinfo++;
-	}
-	//fprintf(stderr, "Formatting Track %i\n", track);
-	init_raw_cmd(&raw_cmd);
-	raw_cmd.flags = FD_RAW_WRITE | FD_RAW_INTR;
-	raw_cmd.flags |= FD_RAW_NEED_SEEK;
-	raw_cmd.track = track;
-	raw_cmd.rate  = 2;	/* SD */
-	//raw_cmd.length= 512;	/* Sectorsize */
-	raw_cmd.length= (128<<(trackinfo->bps));
-	raw_cmd.data  = data;
-
-	raw_cmd.cmd[raw_cmd.cmd_count++] = FD_FORMAT & mask;
-	raw_cmd.cmd[raw_cmd.cmd_count++] = 0;	/* head: 4 or 0 */	//FIXME - this is the physical side to read from
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = 2;	/* sectorsize */
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = 9;	/* sectors */
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = 82;/* GAP */
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = 0;	/* filler */
-	raw_cmd.cmd[raw_cmd.cmd_count++] = trackinfo->bps;	/* sectorsize */
-	raw_cmd.cmd[raw_cmd.cmd_count++] = trackinfo->spt;	/* sectors */
-	raw_cmd.cmd[raw_cmd.cmd_count++] = trackinfo->gap;	/* GAP */
-	raw_cmd.cmd[raw_cmd.cmd_count++] = trackinfo->fill;	/* filler */
-	err = ioctl(fd, FDRAWCMD, &raw_cmd);
-	if (err < 0) {
-		perror("Error formatting");
-		exit(1);
-	}
-	if (raw_cmd.reply[0] & 0x40) {
-		fprintf(stderr, "Could not format track %i\n", track);
-		exit(1);
-	}
-}
-
-/* notes:
- *
- * when writing, you must specify the sector c,h,r,n exactly, otherwise fdc
- * will fail to write data to sector.
- */
-
-//void write_sect(int fd, int track, unsigned char sector, unsigned char *data) {
-void write_sect(int fd, Trackinfo *trackinfo, Sectorinfo *sectorinfo,
+void read_sect(int fd, Trackinfo *trackinfo, Sectorinfo *sectorinfo,
 	unsigned char *data) {
 
 	int i, err;
 	struct floppy_raw_cmd raw_cmd;
-	//format_map_t data[9];
 	unsigned char mask = 0xFF;
 
 	init_raw_cmd(&raw_cmd);
 	raw_cmd.flags = FD_RAW_WRITE | FD_RAW_INTR;
 	raw_cmd.flags |= FD_RAW_NEED_SEEK;
-	//raw_cmd.track = track;
-	//raw_cmd.rate  = 2;	/* SD */
-	//raw_cmd.length= 512;	/* Sectorsize */
-	//raw_cmd.data  = data;
 	raw_cmd.track = sectorinfo->track;
 	raw_cmd.rate  = 2;	/* SD */
 	raw_cmd.length= (128<<(sectorinfo->bps));
 	raw_cmd.data  = data;
 
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = FD_WRITE & mask;
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = 0;		/* head */
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = track;	/* track */
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = 0;		/* head */
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = sector;	/* sector */
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = 2;		/* sectorsize */
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = sector;	/* sector */
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = 82;	/* GPL */
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = 0xFF;	/* DTL */
+	raw_cmd.cmd[raw_cmd.cmd_count++] = FD_READ & mask;
 
-	if (sectorinfo->unused1 & 0x040)
-	{
-		/* "write deleted data" (totally untested!) */
-		raw_cmd.cmd[raw_cmd.cmd_count++] = FD_WRITE_DEL & mask;
-	}
-	else
-	{
-		/* "write data" */
-		raw_cmd.cmd[raw_cmd.cmd_count++] = FD_WRITE & mask;
-	}
-
-	// these parameters are same for "write data" and "write deleted data".
 	raw_cmd.cmd[raw_cmd.cmd_count++] = 0;			/* head */	//FIXME - this is the physical side to read from
 	raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->track;	/* track */
 	raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->head;	/* head */	
@@ -174,16 +77,16 @@ void write_sect(int fd, Trackinfo *trackinfo, Sectorinfo *sectorinfo,
 
 	err = ioctl(fd, FDRAWCMD, &raw_cmd);
 	if (err < 0) {
-		perror("Error writing");
+		perror("Error reading");
 		exit(1);
 	}
 	if (raw_cmd.reply[0] & 0x40) {
-		fprintf(stderr, "Could not write sector %0X\n",
+		fprintf(stderr, "Could not read sector %0X\n",
 			sectorinfo->sector);
 	}
 }
 
-void writedsk(char *filename) {
+void readdsk(char *filename) {
 
 	/* Variable declarations */
 	int fd, tmp, err;
@@ -217,12 +120,15 @@ void writedsk(char *filename) {
 	}
 
 	/* open file */
-	in = fopen(filename, "r");
+	in = fopen(filename, "w");
 	if (in == NULL) {
 		perror("Error opening image file");
 		exit(1);
 	}
 
+	// FIXME: All wrong after here
+
+#if 0
 	/* read disk info, detect extended image */
 	count = fread(&diskinfo, 1, sizeof(diskinfo), in);
 	if (count != sizeof(diskinfo)) {
@@ -281,13 +187,14 @@ void writedsk(char *filename) {
 		fprintf(stderr, "]\n");
 	}
 	fprintf(stderr,"\n");
+#endif
 
 }
 
 int main(int argc, char **argv) {
 
-	if (argc == 2) { writedsk(argv[1]);
-	} else { fprintf(stderr, "usage: dskwrite <filename>\n");
+	if (argc == 2) { readdsk(argv[1]);
+	} else { fprintf(stderr, "usage: dskread <filename>\n");
 	}
 	return 0;
 
