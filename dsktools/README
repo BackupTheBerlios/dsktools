@@ -1,6 +1,6 @@
-$Id: README,v 1.1 2001/12/30 17:16:54 nurgle Exp $
+$Id: README,v 1.2 2003/08/24 21:10:55 nurgle Exp $
 
-README for dsktools Version 0.1.0
+README for dsktools Version 0.2.0
 =================================
 
 Introduction
@@ -17,14 +17,14 @@ Current State
 
 dskwrite is able to write images in standard formats (SYSTEM,DATA) as well as
 some special formats with unusual sector numbering and sector sizes and
-deleted data (untested).
+deleted data (untested). There are no options for selecting the drive, side,
+etc. yet. Only the first side of the floppy disk in /dev/fd0 is used (for
+single sided images).
 
-dskread is less advanced than dskwrite. It only supports disk formats with 9
-sectors per track. SYSTEM and DATA format work fine, but other formats are
-toally untested.
-
-There are no options for selecting the drive, side, etc. yet. Only the first
-side of the floppy disk in /dev/fd0 is used.
+dskread is much more complete than in older revisions. It understand some copy
+protected formats and takes command line options for selecting drive, side,
+number of sides and number of tracks. See dskread -h for a list of known
+options.
 
 Compiling and Installing
 ------------------------
@@ -41,7 +41,8 @@ Straight-forward, really.
 ./dskread <filename>
 
 will read the disk in drive /dev/fd0 and dump the contents into a DSK image
-file.
+file. For non-standard formats there are a bunch of command line options. See
+dskread -h for a list of available options.
 
 ./dskwrite <filename>
 

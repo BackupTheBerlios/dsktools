@@ -1,4 +1,15 @@
-$Id: ChangeLog,v 1.2 2001/12/30 17:16:54 nurgle Exp $
+$Id: ChangeLog,v 1.3 2003/08/24 21:10:55 nurgle Exp $
+
+V0.2
+
+24.08.2003:
+- More compatible drive seek (Kevin Thacker)
+- Major enhancements to dskread: More options, more formats (Kevin Thacker)
+- Add flexible command line parsing to dskread (via GNU getopt)
+- Add comments and benchmark targets to makefile
+- Adjust documentation (README, AUTHORS)
+
+==============================================================================
 
 V0.1.0
 
