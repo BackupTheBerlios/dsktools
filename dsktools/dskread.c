@@ -19,9 +19,11 @@
  *
  * 24.12.2001:
  * - First version of dskread in dsktools.
- * V0.0.4 25.12.2001:
+ * 25.12.2001:
  * - First working version of dskread.
  * - Only reads DATA format.
+ * 26.12.2001:
+ * - Actually read sector IDs from disk to recognize different formats.
  *
  * TODO:
  * - support EDSK properly
@@ -51,6 +53,40 @@
 #include <sys/ioctl.h>
 #include <sys/time.h>
 #include <fcntl.h>
+
+void read_ids(int fd, Trackinfo *trackinfo) {
+
+	int i, err;
+	struct floppy_raw_cmd raw_cmd;
+	unsigned char mask = 0xFF;
+
+	init_raw_cmd(&raw_cmd);
+	raw_cmd.flags = FD_RAW_READ | FD_RAW_INTR;
+	raw_cmd.flags |= FD_RAW_NEED_SEEK;
+	raw_cmd.track = trackinfo->track;
+	raw_cmd.rate  = 2;	/* SD */
+	raw_cmd.length= (128<<(trackinfo->bps));
+
+	raw_cmd.cmd[raw_cmd.cmd_count++] = FD_READID & mask;
+
+	raw_cmd.cmd[raw_cmd.cmd_count++] = 0;			/* head */	//FIXME - this is the physical side to read from
+
+	// FIXME support formats with more/less than 9 sectors.
+	for( i=0; i<9; i++ ) {
+		err = ioctl(fd, FDRAWCMD, &raw_cmd);
+		if (err < 0) {
+			perror("Error reading id");
+			exit(1);
+		}
+		if (raw_cmd.reply[0] & 0x40) {
+			fprintf(stderr, "Could not read sector id\n");
+		}
+		trackinfo->sectorinfo[i].track = raw_cmd.reply[3];
+		trackinfo->sectorinfo[i].head = raw_cmd.reply[4];
+		trackinfo->sectorinfo[i].sector = raw_cmd.reply[5];
+		trackinfo->sectorinfo[i].bps = raw_cmd.reply[6];
+	}
+}
 
 void read_sect(int fd, Trackinfo *trackinfo, Sectorinfo *sectorinfo,
 	unsigned char *data) {
@@ -167,6 +203,7 @@ void readdsk(char *filename) {
 		init_trackinfo( &trackinfo[i], i );
 		printtrackinfo(stderr, &trackinfo[i]);
 		fprintf(stderr, " [");
+		read_ids(fd, &trackinfo[i]);
 		for ( j=0; j<9; j++ ) {
 			sectorinfo = &trackinfo[i].sectorinfo[j];
 			fprintf(stderr, "%0X ", sectorinfo->sector);
