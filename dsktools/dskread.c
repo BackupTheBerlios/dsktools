@@ -17,8 +17,11 @@
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  *
- * V0.0.4 24.12.2001:
+ * 24.12.2001:
  * - First version of dskread in dsktools.
+ * V0.0.4 25.12.2001:
+ * - First working version of dskread.
+ * - Only reads DATA format.
  *
  * TODO:
  * - support EDSK properly
@@ -57,7 +60,7 @@ void read_sect(int fd, Trackinfo *trackinfo, Sectorinfo *sectorinfo,
 	unsigned char mask = 0xFF;
 
 	init_raw_cmd(&raw_cmd);
-	raw_cmd.flags = FD_RAW_WRITE | FD_RAW_INTR;
+	raw_cmd.flags = FD_RAW_READ | FD_RAW_INTR;
 	raw_cmd.flags |= FD_RAW_NEED_SEEK;
 	raw_cmd.track = sectorinfo->track;
 	raw_cmd.rate  = 2;	/* SD */
@@ -86,23 +89,54 @@ void read_sect(int fd, Trackinfo *trackinfo, Sectorinfo *sectorinfo,
 	}
 }
 
+void init_trackinfo( Trackinfo *trackinfo, int track ) {
+
+	int i;
+
+	memset(trackinfo, 0, sizeof(*trackinfo));
+
+	strncpy( trackinfo->magic, MAGIC_TRACK, sizeof( trackinfo->magic ) );
+	//unsigned char unused1[0x03];
+	trackinfo->track = track;
+	trackinfo->head = 0;
+	//unsigned char unused2[0x02];
+	trackinfo->bps = 2;
+	trackinfo->spt = 9;
+	trackinfo->gap = 82;
+	trackinfo->fill = 0xFF;
+	//trackinfo->sectorinfo[29];
+	for ( i=0; i<9; i++ ) {
+		init_sectorinfo( &trackinfo->sectorinfo[i], track, 0, 0xC1+i );
+	}
+
+}
+
+void init_diskinfo( Diskinfo *diskinfo, int tracks, int heads, int tracklen ) {
+
+	memset(diskinfo, 0, sizeof(*diskinfo));
+
+	strncpy( diskinfo->magic, MAGIC_DISK, sizeof( diskinfo->magic ) );
+	diskinfo->tracks = tracks;
+	diskinfo->heads = heads;
+	diskinfo->tracklen[0] = (char) tracklen;
+	diskinfo->tracklen[1] = (char) (tracklen >> 8);
+	//unsigned char tracklenhigh[0xCC];
+
+}
+
 void readdsk(char *filename) {
 
 	/* Variable declarations */
 	int fd, tmp, err;
 	char *drive;
 	struct floppy_raw_cmd raw_cmd;
-	//char buffer[ 512 * 2 * 24 ];
-	//char buffer[ 512 * 9 ];
-	char buffer[ 9 * sizeof(format_map_t) ];
-	format_map_t *data;
 
 	Diskinfo diskinfo;
-	Trackinfo trackinfo;
+	Trackinfo trackinfo[TRACKS];
 	Sectorinfo *sectorinfo, **sectorinfos;
-	unsigned char track[TRACKLEN], *sect;
+	unsigned char data[TRACKLEN*TRACKS], *sect, *track;
 	int tracklen;
-	FILE *in;
+	FILE *file;
 	int i, j, count;
 	char *magic_disk = MAGIC_DISK;
 	char *magic_edisk = MAGIC_EDISK;
@@ -120,74 +154,51 @@ void readdsk(char *filename) {
 	}
 
 	/* open file */
-	in = fopen(filename, "w");
-	if (in == NULL) {
+	file = fopen(filename, "w");
+	if (file == NULL) {
 		perror("Error opening image file");
 		exit(1);
 	}
 
-	// FIXME: All wrong after here
-
-#if 0
-	/* read disk info, detect extended image */
-	count = fread(&diskinfo, 1, sizeof(diskinfo), in);
-	if (count != sizeof(diskinfo)) {
-		myabort("Error reading Disk-Info: File to short\n");
-	}
-	if (strncmp(diskinfo.magic, magic_disk, strlen(magic_disk))) {
-		if (strncmp(diskinfo.magic, magic_edisk, strlen(magic_edisk))) {
-			myabort("Error reading Disk-Info: Invalid Disk-Info\n");
-		}
-		flag_edisk = TRUE;
-	}
-	printdiskinfo(stderr, &diskinfo);
-
-	/* Get tracklen for normal disk images */
-	tracklen = (diskinfo.tracklen[0] + diskinfo.tracklen[1]*256) - 0x100;
-
-	/*fprintf(stderr, "writing Track: ");*/
-	for (i=0; i<diskinfo.tracks; i++) {
-		/* read in track */
-		/*fprintf(stderr, "%2.2i ",i);
-		fflush(stderr);*/
-		if (flag_edisk) tracklen = diskinfo.tracklenhigh[i]*256 - 0x100;
-		if (tracklen > MAX_TRACKLEN) {
-			myabort("Error: Track to long.\n");
-		}
-
-		/* read trackinfo */
-		memset(&trackinfo, 0, sizeof(trackinfo));
-		count = fread(&trackinfo, 1, sizeof(trackinfo), in);
-		if (count != sizeof(trackinfo)) {
-			myabort("Error reading Track-Info: File to short\n");
-		}
-		if (strncmp(trackinfo.magic, magic_track, strlen(magic_track)))
-			myabort("Error reading Track-Info: Invalid Track-Info\n");
-
-		printtrackinfo(stderr, &trackinfo);
-
-		/* read track */
-		count = fread(track, 1, tracklen, in);
-		if (count != tracklen)
-			myabort("Error reading Track: File to short\n");
-
-		/* format track */
-		format_track(fd, i, &trackinfo);
-
-		/* write track */
-		sect = track;
-		sectorinfo = trackinfo.sectorinfo;
+	// FIXME: Extremely unflexible after here
+	
+	sect = data;
+	for ( i=0; i<40; i++ ) {
+		init_trackinfo( &trackinfo[i], i );
+		printtrackinfo(stderr, &trackinfo[i]);
 		fprintf(stderr, " [");
-		for (j=0; j<trackinfo.spt; j++) {
+		for ( j=0; j<9; j++ ) {
+			sectorinfo = &trackinfo[i].sectorinfo[j];
 			fprintf(stderr, "%0X ", sectorinfo->sector);
-			write_sect(fd, &trackinfo, sectorinfo, sect);
-			sectorinfo++;
-			sect += (128<<trackinfo.bps);
+			read_sect(fd, &trackinfo[i], sectorinfo, sect);
+			sect += 0x200;
 		}
 		fprintf(stderr, "]\n");
 	}
-	fprintf(stderr,"\n");
-#endif
+
+	init_diskinfo( &diskinfo, 40, 1, TRACKLEN_INFO );
+	printdiskinfo(stderr, &diskinfo);
+
+	count = fwrite(&diskinfo, 1, sizeof(diskinfo), file);
+	if (count != sizeof(diskinfo)) {
+		myabort("Error writing Disk-Info: File to short\n");
+	}
+
+	track = data;
+	tracklen = TRACKLEN;
+	for (i=0; i<diskinfo.tracks; i++) {
+		count = fwrite(&trackinfo[i], 1, sizeof(trackinfo[i]), file);
+		if (count != sizeof(trackinfo[i])) {
+			myabort("Error writing Track-Info: File to short\n");
+		}
+		count = fwrite(track, 1, tracklen, file);
+		if (count != tracklen) {
+			myabort("Error writing Track: File to short\n");
+		}
+		track += tracklen;
+	}
+
+	fclose(file);
 
 }
 
