@@ -1,4 +1,12 @@
-$Id: ChangeLog,v 1.1 2001/12/27 01:53:07 nurgle Exp $
+$Id: ChangeLog,v 1.2 2001/12/30 17:16:54 nurgle Exp $
+
+V0.1.0
+
+30.12.2001:
+- Write documentation (README, AUTHORS)
+- Add gvim option to Makefile
+
+==============================================================================
 
 V0.0.4
 
