@@ -1,4 +1,4 @@
-/* $Id: common.h,v 1.2 2001/12/27 01:53:07 nurgle Exp $
+/* $Id: common.h,v 1.3 2003/08/24 19:40:37 nurgle Exp $
  *
  * common.h - Common functions for dsktools.
  * Copyright (C)2001 Andreas Micklei <nurgle@gmx.de>
@@ -48,6 +48,8 @@
 #define MAGIC_DISK_WRITE "MV - CPCEMU / 27 Dec 01 01:11"
 #define MAGIC_EDISK "EXTENDED"
 #define	TRACKS 40
+#define MAX_TRACKS 82
+#define MAX_SIDES 2
 #define HEADS 1
 #define TRACKLEN_INFO (TRACKLEN + 0x100)
 
@@ -126,8 +128,10 @@ void init_raw_cmd(struct floppy_raw_cmd *raw_cmd);
 /* Reset FDD */
 void reset(int fd);
 
+void init(int fd, int drive);
+
 /* Recalibrate FDD to track 0 */
-void recalibrate(int fd);
+void recalibrate(int fd, int drive);
 
 #endif /* COMMON_H */
 

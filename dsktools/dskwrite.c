@@ -1,4 +1,4 @@
-/* $Id: dskwrite.c,v 1.4 2001/12/27 01:53:07 nurgle Exp $
+/* $Id: dskwrite.c,v 1.5 2003/08/24 19:40:37 nurgle Exp $
  *
  * dskwrite.c - Small utility to write CPC disk images to a floppy disk under
  * Linux with a standard PC FDC.
@@ -197,7 +197,7 @@ void writedsk(char *filename) {
 		exit(1);
 	}
 
-	init( fd );
+	init( fd, 0 );
 
 	/* read disk info, detect extended image */
 	count = fread(&diskinfo, 1, sizeof(diskinfo), in);

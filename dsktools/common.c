@@ -1,4 +1,4 @@
-/* $Id: common.c,v 1.2 2001/12/27 01:53:07 nurgle Exp $
+/* $Id: common.c,v 1.3 2003/08/24 19:40:37 nurgle Exp $
  *
  * common.c - Common functions for dsktools.
  * Copyright (C)2001 Andreas Micklei <nurgle@gmx.de>
@@ -97,44 +97,124 @@ void reset(int fd) {
 
 	err = ioctl(fd, FDRESET);
 	if (err < 0) {
-		perror("Error resetting drive");
+		perror("Error resetting fdc");
 		exit(1);
 	}
 
 }
 
-void recalibrate(int fd) {
+void recalibrate(int fd, int drive) {
 
 	int i, err;
 	struct floppy_raw_cmd raw_cmd;
 	unsigned char mask = 0xFF;
 
+	/* some floppy disc controllers will seek a maximum of 77 tracks
+	   for a reclibrate command. This is not sufficient if the 
+	   position of the read/write head is on track 78 or above as is
+	   possible with a 80 track drive.
+ 
+	   other floppy disc controllers will seek 80 tracks for a 
+	   recalibrate command.
+
+	   1) perform a recalibrate command.
+              the result will either be a successfull seek, and the
+              read/write head will be over track 0. (seek end,
+              interrupt code = 0). Or there will be an error (seek end,
+	      equipment check, and interrupt code!=0).
+	   2) test if the read/write head is over track 0 using
+	      get drive status.
+           3) if the read/write head is not over track 0 (possible with
+	      floppy disc controllers that seek up to 77 tracks), then do
+              a second recalibrate. 
+           4) test if the read/write head is over track 0 using
+              get drive status.
+           5) if the read/write head is not over track 0 then drive may
+              be broken, or may not be connected.
+	*/
+
+	/* first recalibrate */
 	init_raw_cmd(&raw_cmd);
-	raw_cmd.flags = FD_RAW_READ | FD_RAW_INTR;
-	raw_cmd.flags |= FD_RAW_NEED_SEEK;
-	raw_cmd.length = 128 << 2;	/* FIXME: Is this correct? */
-
+	raw_cmd.flags = FD_RAW_INTR;
+	raw_cmd.length = 0;
 	raw_cmd.cmd[raw_cmd.cmd_count++] = FD_RECALIBRATE & mask;
-
-	raw_cmd.cmd[raw_cmd.cmd_count++] = 0;			/* head */	//FIXME - this is the physical side to read from
-
+	raw_cmd.cmd[raw_cmd.cmd_count++] = drive;			
 	err = ioctl(fd, FDRAWCMD, &raw_cmd);
 	if (err < 0) {
 		perror("Error recalibrating");
 		exit(1);
 	}
-	if (raw_cmd.reply[0] & 0x40) {
-		fprintf(stderr, "Could not recalibrate drive\n");
+
+	/* if read/write head was at track>77 and floppy disc controller
+	can only seek 77 tracks using recalibrate command:
+	- seek end
+	- seek complete
+	- track0 is not set
+
+	perform a second recalibrate to seek the remaining tracks */	
+	
+	/* get drive status */
+	init_raw_cmd(&raw_cmd);
+	raw_cmd.flags = 0;
+	raw_cmd.length = 0;
+	raw_cmd.cmd[raw_cmd.cmd_count++] = FD_GETSTATUS & mask;
+	raw_cmd.cmd[raw_cmd.cmd_count++] = drive;
+	err = ioctl(fd, FDRAWCMD, &raw_cmd);
+	if (err<0)
+	{
+		perror("Error recalibrating");
+		exit(1);
+	}
+	/* at track 0? */
+	if (raw_cmd.reply[0] & ST3_TZ)
+		return;
+
+
+	/* no */
+
+	/* recalibrate a second time */
+	init_raw_cmd(&raw_cmd);
+	raw_cmd.flags = FD_RAW_INTR;
+	raw_cmd.length = 0;
+	raw_cmd.cmd[raw_cmd.cmd_count++] = FD_RECALIBRATE & mask;
+	raw_cmd.cmd[raw_cmd.cmd_count++] = drive;			
+	err = ioctl(fd, FDRAWCMD, &raw_cmd);
+	if (err < 0) {
+		perror("Error recalibrating");
+		exit(1);
 	}
 
+	/* get drive status */
+	init_raw_cmd(&raw_cmd);
+	raw_cmd.flags = 0;
+	raw_cmd.length = 0;
+	raw_cmd.cmd[raw_cmd.cmd_count++] = FD_GETSTATUS & mask;
+	raw_cmd.cmd[raw_cmd.cmd_count++] = drive;
+	err = ioctl(fd, FDRAWCMD, &raw_cmd);
+	if (err<0)
+	{
+		perror("Error recalibrating");
+		exit(1);
+	}
+
+	/* at track 0? */
+	if (raw_cmd.reply[0] & ST3_TZ)
+		return;
+
+	/* if recalibrate failed a second time:
+	- disc drive is broken
+	- disc drive doesn't exist
+	*/
+
+	printf("Disc drive malfunction, or disc drive not connected");
+	exit(1);
 }
 
-void init(int fd) {
+void init(int fd, int drive) {
 
 	reset( fd );
 	usleep( 100 );
-	recalibrate( fd );
+	recalibrate( fd,drive);
 	usleep( 100 );
-
 }
 
