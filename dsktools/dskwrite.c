@@ -1,4 +1,4 @@
-/* $Id: dskwrite.c,v 1.5 2003/08/24 19:40:37 nurgle Exp $
+/* $Id: dskwrite.c,v 1.6 2004/12/30 22:49:36 nurgle Exp $
  *
  * dskwrite.c - Small utility to write CPC disk images to a floppy disk under
  * Linux with a standard PC FDC.
@@ -171,7 +171,7 @@ void writedsk(char *filename) {
 	Diskinfo diskinfo;
 	Trackinfo trackinfo;
 	Sectorinfo *sectorinfo, **sectorinfos;
-	unsigned char track[TRACKLEN], *sect;
+	unsigned char track[MAX_TRACKLEN], *sect;
 	int tracklen;
 	FILE *in;
 	int i, j, count;
