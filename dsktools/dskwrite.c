@@ -22,6 +22,10 @@
  * V0.0.2 21.6.2001:
  * - added rudimentary support for EDSK images
  * - added command line argument for input file instead of reading stdin
+ * V0.0.3 21.12.2001:
+ * - merged in changes from Kevin Thacker to handle more copy protection
+ *   schemes: - invalid track and head ids in sector headers
+ *            - deleted data (untested)
  *
  * TODO:
  * - support EDSK properly
@@ -50,9 +54,18 @@
 #include <sys/time.h>
 #include <fcntl.h>
 
-#define	TRUE -1;
-#define	FALSE 0;
+/* These raw floppy commands are missing in fdreg.h. Use with caution.
+ */
+#define FD_READ_DEL		0xCC	/* read deleted with MT, MFM */
+#define FD_WRITE_DEL		0xC9	/* write deleted with MT, MFM */
 
+/* Boolean values
+ */
+#define	TRUE -1
+#define	FALSE 0
+
+/* Various DSK image file and actual disk parameters
+ */
 #define MAGIC_DISK "MV - CPC"
 #define MAGIC_EDISK "EXTENDED"
 #define	TRACKS 40
@@ -75,8 +88,6 @@
 #define OFF_IBM 0x01
 #define OFF_SYS 0x41
 #define OFF_DAT 0xC1
-
-#define MAGIC 42
 
 
 typedef struct diskinfo_t {
@@ -191,6 +202,13 @@ static void init_raw_cmd(struct floppy_raw_cmd *raw_cmd)
 	raw_cmd->resultcode = 0;	
 }
 
+/* notes:
+ *
+ * the C (track),H (head),R (sector id),N (sector size) parameters in the
+ * sector id field do not need to be the same as the physical track and
+ * physical side.
+ */
+
 void format_track(int fd, int track, Trackinfo *trackinfo) {
 
 	int i, err;
@@ -205,8 +223,8 @@ void format_track(int fd, int track, Trackinfo *trackinfo) {
 		//data[i].size = 2;	/* 0=128, 1=256, 2=512,... */
 		data[i].sector = sectorinfo->sector;
 		data[i].size = sectorinfo->bps;
-		data[i].cylinder = track;
-		data[i].head = 0;	//FIXME
+		data[i].cylinder = sectorinfo->track;
+		data[i].head = sectorinfo->head;	
 		sectorinfo++;
 	}
 	//fprintf(stderr, "Formatting Track %i\n", track);
@@ -220,10 +238,10 @@ void format_track(int fd, int track, Trackinfo *trackinfo) {
 	raw_cmd.data  = data;
 
 	raw_cmd.cmd[raw_cmd.cmd_count++] = FD_FORMAT & mask;
-	raw_cmd.cmd[raw_cmd.cmd_count++] = 0;	/* head: 4 or 0 */	//FIXME
+	raw_cmd.cmd[raw_cmd.cmd_count++] = 0;	/* head: 4 or 0 */	//FIXME - this is the physical side to read from
 	//raw_cmd.cmd[raw_cmd.cmd_count++] = 2;	/* sectorsize */
 	//raw_cmd.cmd[raw_cmd.cmd_count++] = 9;	/* sectors */
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = 82;	/* GAP */
+	//raw_cmd.cmd[raw_cmd.cmd_count++] = 82;/* GAP */
 	//raw_cmd.cmd[raw_cmd.cmd_count++] = 0;	/* filler */
 	raw_cmd.cmd[raw_cmd.cmd_count++] = trackinfo->bps;	/* sectorsize */
 	raw_cmd.cmd[raw_cmd.cmd_count++] = trackinfo->spt;	/* sectors */
@@ -239,6 +257,12 @@ void format_track(int fd, int track, Trackinfo *trackinfo) {
 		exit(1);
 	}
 }
+
+/* notes:
+ *
+ * when writing, you must specify the sector c,h,r,n exactly, otherwise fdc
+ * will fail to write data to sector.
+ */
 
 //void write_sect(int fd, int track, unsigned char sector, unsigned char *data) {
 void write_sect(int fd, Trackinfo *trackinfo, Sectorinfo *sectorinfo,
@@ -268,17 +292,29 @@ void write_sect(int fd, Trackinfo *trackinfo, Sectorinfo *sectorinfo,
 	//raw_cmd.cmd[raw_cmd.cmd_count++] = sector;	/* sector */
 	//raw_cmd.cmd[raw_cmd.cmd_count++] = 2;		/* sectorsize */
 	//raw_cmd.cmd[raw_cmd.cmd_count++] = sector;	/* sector */
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = 82;		/* GPL */
+	//raw_cmd.cmd[raw_cmd.cmd_count++] = 82;	/* GPL */
 	//raw_cmd.cmd[raw_cmd.cmd_count++] = 0xFF;	/* DTL */
-	raw_cmd.cmd[raw_cmd.cmd_count++] = FD_WRITE & mask;
-	raw_cmd.cmd[raw_cmd.cmd_count++] = 0;		/* head */	//FIXME
+
+	if (sectorinfo->unused1 & 0x040)
+	{
+		/* "write deleted data" (totally untested!) */
+		raw_cmd.cmd[raw_cmd.cmd_count++] = FD_WRITE_DEL & mask;
+	}
+	else
+	{
+		/* "write data" */
+		raw_cmd.cmd[raw_cmd.cmd_count++] = FD_WRITE & mask;
+	}
+
+	// these parameters are same for "write data" and "write deleted data".
+	raw_cmd.cmd[raw_cmd.cmd_count++] = 0;			/* head */	//FIXME - this is the physical side to read from
 	raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->track;	/* track */
-	raw_cmd.cmd[raw_cmd.cmd_count++] = 0;		/* head */	//FIXME
+	raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->head;	/* head */	
 	raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->sector;	/* sector */
 	raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->bps;	/* sectorsize */
 	raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->sector;	/* sector */
 	raw_cmd.cmd[raw_cmd.cmd_count++] = trackinfo->gap;	/* GPL */
-	raw_cmd.cmd[raw_cmd.cmd_count++] = 0xFF;	/* DTL */
+	raw_cmd.cmd[raw_cmd.cmd_count++] = 0xFF;		/* DTL */
 
 	err = ioctl(fd, FDRAWCMD, &raw_cmd);
 	if (err < 0) {
