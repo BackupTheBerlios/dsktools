@@ -3,6 +3,9 @@ all:	dskwrite dskread
 clean:
 	rm dskread dskwrite *.o *~
 
+gvim:
+	gvim *.c *.h Makefile ChangeLog TODO
+
 dskread: dskread.c common.o
 	gcc -g -o dskread dskread.c common.o
 
