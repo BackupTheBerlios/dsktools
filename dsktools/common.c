@@ -1,4 +1,5 @@
-/*
+/* $Id: common.c,v 1.2 2001/12/27 01:53:07 nurgle Exp $
+ *
  * common.c - Common functions for dsktools.
  * Copyright (C)2001 Andreas Micklei <nurgle@gmx.de>
  *
@@ -15,7 +16,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
- *
  */
 
 #include "common.h"
@@ -89,5 +89,52 @@ void init_raw_cmd(struct floppy_raw_cmd *raw_cmd)
 	raw_cmd->cmd_count = 0;
 	raw_cmd->reply_count = 0;
 	raw_cmd->resultcode = 0;	
+}
+
+void reset(int fd) {
+
+	int err;
+
+	err = ioctl(fd, FDRESET);
+	if (err < 0) {
+		perror("Error resetting drive");
+		exit(1);
+	}
+
+}
+
+void recalibrate(int fd) {
+
+	int i, err;
+	struct floppy_raw_cmd raw_cmd;
+	unsigned char mask = 0xFF;
+
+	init_raw_cmd(&raw_cmd);
+	raw_cmd.flags = FD_RAW_READ | FD_RAW_INTR;
+	raw_cmd.flags |= FD_RAW_NEED_SEEK;
+	raw_cmd.length = 128 << 2;	/* FIXME: Is this correct? */
+
+	raw_cmd.cmd[raw_cmd.cmd_count++] = FD_RECALIBRATE & mask;
+
+	raw_cmd.cmd[raw_cmd.cmd_count++] = 0;			/* head */	//FIXME - this is the physical side to read from
+
+	err = ioctl(fd, FDRAWCMD, &raw_cmd);
+	if (err < 0) {
+		perror("Error recalibrating");
+		exit(1);
+	}
+	if (raw_cmd.reply[0] & 0x40) {
+		fprintf(stderr, "Could not recalibrate drive\n");
+	}
+
+}
+
+void init(int fd) {
+
+	reset( fd );
+	usleep( 100 );
+	recalibrate( fd );
+	usleep( 100 );
+
 }
 

@@ -1,0 +1,44 @@
+$Id: ChangeLog,v 1.1 2001/12/27 01:53:07 nurgle Exp $
+
+V0.0.4
+
+27.12.2001:
+- Interleave sector reading for a major speedup.
+- Reset and recalibrate drive at beginning of program.
+- Move ChangeLog into separate file.
+- Move TODO into separate file.
+
+26.12.2001:
+- Actually read sector IDs from disk to recognize different formats.
+
+25.12.2001:
+- First working version of dskread.
+- Only reads DATA format.
+
+24.12.2001:
+- moved common types and routines for dskwrite and dskread into common.c
+- First version of dskread in dsktools.
+
+==============================================================================
+
+V0.0.3
+
+21.12.2001:
+- merged in changes from Kevin Thacker to handle more copy protection
+  schemes: - invalid track and head ids in sector headers
+           - deleted data (untested)
+==============================================================================
+
+V0.0.2
+
+21.6.2001:
+- added rudimentary support for EDSK images
+- added command line argument for input file instead of reading stdin
+
+==============================================================================
+
+V0.0.1
+
+20.6.2001:
+- first working version of dskwrite
+

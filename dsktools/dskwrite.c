@@ -1,4 +1,5 @@
-/*
+/* $Id: dskwrite.c,v 1.4 2001/12/27 01:53:07 nurgle Exp $
+ *
  * dskwrite.c - Small utility to write CPC disk images to a floppy disk under
  * Linux with a standard PC FDC.
  * Copyright (C)2001 Andreas Micklei <nurgle@gmx.de>
@@ -16,33 +17,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
- *
- * V0.0.1 20.6.2001:
- * - first working version
- * V0.0.2 21.6.2001:
- * - added rudimentary support for EDSK images
- * - added command line argument for input file instead of reading stdin
- * V0.0.3 21.12.2001:
- * - merged in changes from Kevin Thacker to handle more copy protection
- *   schemes: - invalid track and head ids in sector headers
- *            - deleted data (untested)
- * V0.0.4 24.12.2001:
- * - moved common types and routines for dskwrite and dskread into common.c
- *
- * TODO:
- * - support EDSK properly
- * - handle less common parameter like double sided disks, etc.
- * - handle difficult copy protection schemes like the one on Prehistoric2 for
- *   example
- * - make side of disc (head) selectable
- * - improve user interface
- * - do tool for reading floppys into images
- * - clean up code
- * - split code into separate modules/files
- * - integrate with amssdsk
- * - add clever build system, use GNU autoconf/automake
- * - maybe sync with John Elliots libdsk
- * - build GTK+ GUI
  */
 
 #include "common.h"
@@ -222,6 +196,8 @@ void writedsk(char *filename) {
 		perror("Error opening image file");
 		exit(1);
 	}
+
+	init( fd );
 
 	/* read disk info, detect extended image */
 	count = fread(&diskinfo, 1, sizeof(diskinfo), in);

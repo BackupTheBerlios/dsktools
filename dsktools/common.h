@@ -1,4 +1,5 @@
-/*
+/* $Id: common.h,v 1.2 2001/12/27 01:53:07 nurgle Exp $
+ *
  * common.h - Common functions for dsktools.
  * Copyright (C)2001 Andreas Micklei <nurgle@gmx.de>
  *
@@ -15,7 +16,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
- *
  */
 
 #ifndef COMMON_H
@@ -45,6 +45,7 @@
 /* Various DSK image file and actual disk parameters
  */
 #define MAGIC_DISK "MV - CPC"
+#define MAGIC_DISK_WRITE "MV - CPCEMU / 27 Dec 01 01:11"
 #define MAGIC_EDISK "EXTENDED"
 #define	TRACKS 40
 #define HEADS 1
@@ -121,6 +122,12 @@ void init_sectorinfo(Sectorinfo *sectorinfo, int track, int head, int sector);
 
 /* Initialise a raw FDC command */
 void init_raw_cmd(struct floppy_raw_cmd *raw_cmd);
+
+/* Reset FDD */
+void reset(int fd);
+
+/* Recalibrate FDD to track 0 */
+void recalibrate(int fd);
 
 #endif /* COMMON_H */
 

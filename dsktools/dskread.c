@@ -1,4 +1,5 @@
-/*
+/* $Id: dskread.c,v 1.4 2001/12/27 01:53:07 nurgle Exp $
+ *
  * dskread.c - Small utility to read CPC disk images from a floppy disk under
  * Linux with a standard PC FDC.
  * Copyright (C)2001 Andreas Micklei <nurgle@gmx.de>
@@ -16,29 +17,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software Foundation,
  * Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
- *
- * 24.12.2001:
- * - First version of dskread in dsktools.
- * 25.12.2001:
- * - First working version of dskread.
- * - Only reads DATA format.
- * 26.12.2001:
- * - Actually read sector IDs from disk to recognize different formats.
- *
- * TODO:
- * - support EDSK properly
- * - handle less common parameter like double sided disks, etc.
- * - handle difficult copy protection schemes like the one on Prehistoric2 for
- *   example
- * - make side of disc (head) selectable
- * - improve user interface
- * - do tool for reading floppys into images
- * - clean up code
- * - split code into separate modules/files
- * - integrate with amssdsk
- * - add clever build system, use GNU autoconf/automake
- * - maybe sync with John Elliots libdsk
- * - build GTK+ GUI
  */
 
 #include "common.h"
@@ -53,6 +31,43 @@
 #include <sys/ioctl.h>
 #include <sys/time.h>
 #include <fcntl.h>
+#include <time.h>
+
+void rotateleft_sectorids(Trackinfo *trackinfo, int pos) {
+
+	Sectorinfo sectorinfo[29];
+	int i, spt;
+
+	memcpy( sectorinfo, trackinfo->sectorinfo, sizeof( Sectorinfo ) * 30 );
+
+	spt = trackinfo->spt;
+	for( i=0; i<spt; i++ ) {
+		memcpy( &trackinfo->sectorinfo[i],
+			&sectorinfo[(i+pos)%spt], sizeof( Sectorinfo ) );
+	}
+
+}
+
+void rotate_sectorids(Trackinfo *trackinfo) {
+
+	int i, low, pos, sector;
+
+	low = 0xFF;
+	pos = 0;
+
+	/* Find lowest sector number */
+	for( i=0; i<trackinfo->spt; i++ ) {
+		sector = trackinfo->sectorinfo[i].sector;
+		if ( sector < low ) {
+			low = sector;
+			pos = i;
+		}
+	}
+
+	/* Rotate sectorids in trackinfo left by pos positions */
+	rotateleft_sectorids(trackinfo, pos);
+
+}
 
 void read_ids(int fd, Trackinfo *trackinfo) {
 
@@ -71,8 +86,7 @@ void read_ids(int fd, Trackinfo *trackinfo) {
 
 	raw_cmd.cmd[raw_cmd.cmd_count++] = 0;			/* head */	//FIXME - this is the physical side to read from
 
-	// FIXME support formats with more/less than 9 sectors.
-	for( i=0; i<9; i++ ) {
+	for( i=0; i<trackinfo->spt; i++ ) {
 		err = ioctl(fd, FDRAWCMD, &raw_cmd);
 		if (err < 0) {
 			perror("Error reading id");
@@ -86,6 +100,8 @@ void read_ids(int fd, Trackinfo *trackinfo) {
 		trackinfo->sectorinfo[i].sector = raw_cmd.reply[5];
 		trackinfo->sectorinfo[i].bps = raw_cmd.reply[6];
 	}
+
+	rotate_sectorids( trackinfo );
 }
 
 void read_sect(int fd, Trackinfo *trackinfo, Sectorinfo *sectorinfo,
@@ -151,12 +167,24 @@ void init_diskinfo( Diskinfo *diskinfo, int tracks, int heads, int tracklen ) {
 
 	memset(diskinfo, 0, sizeof(*diskinfo));
 
-	strncpy( diskinfo->magic, MAGIC_DISK, sizeof( diskinfo->magic ) );
+	strncpy( diskinfo->magic, MAGIC_DISK_WRITE, sizeof( diskinfo->magic ) );
 	diskinfo->tracks = tracks;
 	diskinfo->heads = heads;
 	diskinfo->tracklen[0] = (char) tracklen;
 	diskinfo->tracklen[1] = (char) (tracklen >> 8);
 	//unsigned char tracklenhigh[0xCC];
+
+}
+
+void timestamp_diskinfo( Diskinfo *diskinfo ) {
+
+	time_t t;
+	struct tm *ltime;
+
+	t = time(NULL);
+	ltime = localtime(&t);
+	/* FIXME: Can the formatting be messed up by locale settings? */
+	strftime( diskinfo->magic+14, 16, "%d %b %g %H:%M", ltime );
 
 }
 
@@ -196,7 +224,9 @@ void readdsk(char *filename) {
 		exit(1);
 	}
 
-	// FIXME: Extremely unflexible after here
+	init( fd );
+
+	/* FIXME: Extremely unflexible after here */
 	
 	sect = data;
 	for ( i=0; i<40; i++ ) {
@@ -204,16 +234,34 @@ void readdsk(char *filename) {
 		printtrackinfo(stderr, &trackinfo[i]);
 		fprintf(stderr, " [");
 		read_ids(fd, &trackinfo[i]);
-		for ( j=0; j<9; j++ ) {
+		/* Slow version: Read sectors in order */
+		/*
+		for ( j=0; j<trackinfo->spt; j++ ) {
 			sectorinfo = &trackinfo[i].sectorinfo[j];
 			fprintf(stderr, "%0X ", sectorinfo->sector);
 			read_sect(fd, &trackinfo[i], sectorinfo, sect);
 			sect += 0x200;
 		}
+		*/
+		/* Fast version: Read sectors interleaved in two passes */
+		for ( j=0; j<trackinfo->spt; j+=2 ) {
+			sectorinfo = &trackinfo[i].sectorinfo[j];
+			fprintf(stderr, "%0X ", sectorinfo->sector);
+			read_sect(fd, &trackinfo[i], sectorinfo, sect);
+			sect += 0x400;
+		}
+		sect = sect - ( 0x400 * j/2 ) + 0x200;
+		for ( j=1; j<trackinfo->spt; j+=2 ) {
+			sectorinfo = &trackinfo[i].sectorinfo[j];
+			fprintf(stderr, "%0X ", sectorinfo->sector);
+			read_sect(fd, &trackinfo[i], sectorinfo, sect);
+			sect += 0x400;
+		}
 		fprintf(stderr, "]\n");
 	}
 
 	init_diskinfo( &diskinfo, 40, 1, TRACKLEN_INFO );
+	timestamp_diskinfo( &diskinfo );
 	printdiskinfo(stderr, &diskinfo);
 
 	count = fwrite(&diskinfo, 1, sizeof(diskinfo), file);
