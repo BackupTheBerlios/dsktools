@@ -1,4 +1,4 @@
-/* $Id: dskread.c,v 1.5 2003/08/24 19:40:37 nurgle Exp $
+/* $Id: dskread.c,v 1.6 2003/08/24 20:57:41 nurgle Exp $
  *
  * dskread.c - Small utility to read CPC disk images from a floppy disk under
  * Linux with a standard PC FDC.
@@ -22,10 +22,10 @@
 #include "common.h"
 
 #include <unistd.h>
+#include <getopt.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <linux/fd.h>
 #include <linux/fdreg.h>
 #include <sys/ioctl.h>
@@ -501,22 +501,72 @@ sizeof(trackinfo[ninfo]), file);
 
 }
 
+void help_exit(int exitcode) {
+	fprintf(stderr, "usage: dskread [options] <filename>\n");
+	fprintf(stderr, "options: -d | --drive <drive>    select drive\n");
+	fprintf(stderr, "         -s | --side <side>      select side\n");
+	fprintf(stderr, "         -S | --sides <sides>    number of sides\n");
+	fprintf(stderr, "         -t | --tracks <tracks>  number of tracks\n");
+	fprintf(stderr, "         -h                      this help\n");
+	exit(exitcode);
+}
+
 int main(int argc, char **argv) {
 
-	if (argc == 6) 
-	{ 
-		readdsk(
-		argv[5],	/* filename */
-		atoi(argv[1]), 		/* drive */
-		atoi(argv[2]),		/* side */
-		atoi(argv[4]),		/* sides */
-		atoi(argv[3])		/* tracks */
-		);		
-	} 
-	else 
-	{ 
-		fprintf(stderr, "usage: dskread <drive> <side> <tracks> <sides> <filename>\n");
+	static struct option long_options[] = {
+		{"drive", 1, 0, 'd'},
+		{"side", 1, 0, 's'},
+		{"sides", 1, 0, 'S'},
+		{"tracks", 1, 0, 't'},
+		{"help", 0, 0, 'h'},
+		{0, 0, 0, 0}
+	};
+	int c;
+	char *drive_string = NULL;
+	char *side_string = NULL;
+	char *sides_string = NULL;
+	char *tracks_string = NULL;
+	int drive = 0;
+	char side = 0;
+	char sides = 1;
+	char tracks = 40;
+
+	do {
+		int this_option_optind = optind ? optind : 1;
+		int option_index = 0;
+		c = getopt_long(argc, argv, "d:s:S:t:h",
+			long_options, &option_index);
+		switch(c) {
+			case 'h':
+			case '?':
+				help_exit(0);
+				break;
+			case 'd':
+				drive_string = optarg;
+				break;
+			case 's':
+				side_string = optarg;
+				break;
+			case 'S':
+				sides_string = optarg;
+				break;
+			case 't':
+				tracks_string = optarg;
+				break;
+		}
+	} while (c != -1);
+
+	if (argc - optind != 1) {
+		help_exit(1);
 	}
+
+	if (drive_string != NULL) drive = atoi(drive_string);
+	if (side_string != NULL) side = atoi(side_string);
+	if (sides_string != NULL) sides = atoi(sides_string);
+	if (tracks_string != NULL) tracks = atoi(tracks_string);
+
+	readdsk( argv[optind], drive, side, sides, tracks );
+
 	return 0;
 
 }
