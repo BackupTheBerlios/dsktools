@@ -1,3 +1,5 @@
+#$Id: Makefile,v 1.4 2001/12/30 16:31:10 nurgle Exp $
+
 all:	dskwrite dskread
 
 clean:
