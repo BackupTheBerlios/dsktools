@@ -1,4 +1,4 @@
-/* $Id: dskwrite.c,v 1.7 2008/06/25 08:19:10 pulkomandy Exp $
+/* $Id: dskwrite.c,v 1.8 2008/06/25 13:55:28 pulkomandy Exp $
  *
  * dskwrite.c - Small utility to write CPC disk images to a floppy disk under
  * Linux with a standard PC FDC.
@@ -268,7 +268,7 @@ int main(int argc, char **argv) {
 	}
 	else if( (argc==3) && (strcmp(argv[1],"b")==0) )
 	{
-	    writedsk(argv[1],4); //Write on side B
+	    writedsk(argv[2],4); //Write on side B
 	}
 	else
 	{

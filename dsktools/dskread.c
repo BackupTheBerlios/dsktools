@@ -1,4 +1,4 @@
-/* $Id: dskread.c,v 1.6 2003/08/24 20:57:41 nurgle Exp $
+/* $Id: dskread.c,v 1.7 2008/06/25 13:55:28 pulkomandy Exp $
  *
  * dskread.c - Small utility to read CPC disk images from a floppy disk under
  * Linux with a standard PC FDC.
@@ -281,46 +281,59 @@ int read_ids(int fd, Trackinfo *trackinfo, int head, int drive) {
 void read_sect(int fd, Trackinfo *trackinfo, Sectorinfo *sectorinfo,
 	unsigned char *data, int track, int head, int drive) {
 
-	int i, err;
+	int i, err, retry=0, ok=0;
 	struct floppy_raw_cmd raw_cmd;
 	unsigned char mask = 0xFF;
 
 //	reset(fd);
 
-	init_raw_cmd(&raw_cmd);
-	raw_cmd.flags = FD_RAW_READ | FD_RAW_INTR;
-	raw_cmd.track = track;
-	raw_cmd.rate  = 2;	/* SD */
-	raw_cmd.length= (128<<(sectorinfo->bps));
-	raw_cmd.data  = data;
-	raw_cmd.cmd_count = 0;
-	raw_cmd.cmd[raw_cmd.cmd_count++] = READ_DATA & mask;
-	raw_cmd.cmd[raw_cmd.cmd_count++] = (head<<2) | drive;			/* head */
-	raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->track;	/* track */
-	raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->head;	/* head */	
-	raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->sector;	/* sector */
-	raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->bps;	/* sectorsize */
-	raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->sector;	/* sector */
-	raw_cmd.cmd[raw_cmd.cmd_count++] = trackinfo->gap;	/* GPL */
-	raw_cmd.cmd[raw_cmd.cmd_count++] = 0xFF;		/* DTL */
-
-	err = ioctl(fd, FDRAWCMD, &raw_cmd);
-	if (err < 0) {
-		perror("Error reading");
-		exit(1);
-	}
-
-	if (((raw_cmd.reply[0] &0x0f8)==0x040) && (raw_cmd.reply[1]==0x080))
+	do
 	{
-		/* end of cylinder */
-		return;
-	}
 
-	if (raw_cmd.reply[0] & 0x40) {
-		printf("%02x %02x %02x\r\n",raw_cmd.reply[0],raw_cmd.reply[1], raw_cmd.reply[2]);
+		init_raw_cmd(&raw_cmd);
+		raw_cmd.flags = FD_RAW_READ | FD_RAW_INTR;
+		raw_cmd.track = track;
+		raw_cmd.rate  = 2;	/* SD */
+		raw_cmd.length= (128<<(sectorinfo->bps));
+		raw_cmd.data  = data;
+		raw_cmd.cmd_count = 0;
+		raw_cmd.cmd[raw_cmd.cmd_count++] = READ_DATA & mask;
+		raw_cmd.cmd[raw_cmd.cmd_count++] = (head<<2) | drive;	/* head */
+		raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->track;	/* track */
+		raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->head;	/* head */	
+		raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->sector;	/* sector */
+		raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->bps;	/* sectorsize */
+		raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->sector;	/* sector */
+		raw_cmd.cmd[raw_cmd.cmd_count++] = trackinfo->gap;	/* GPL */
+		raw_cmd.cmd[raw_cmd.cmd_count++] = 0xFF;		/* DTL */
+	
+		err = ioctl(fd, FDRAWCMD, &raw_cmd);
+		if (err < 0) {
+			perror("Error reading");
+			exit(1);
+		}
+
+		if (((raw_cmd.reply[0] &0x0f8)==0x040) && (raw_cmd.reply[1]==0x080))
+		{
+			/* end of cylinder */
+			return;
+		}
+
+		if (raw_cmd.reply[0] & 0x40) {
+			recalibrate(fd,drive);
+			retry++;
+			fprintf(stderr,"TRY %d \n",retry);
+		}
+		else ok = 1; // Read ok, go to next
+	}while( (retry<10) && (ok == 0) );
+
+	if(!ok)
+	{
+		printf("\n%02x %02x %02x\r\n",raw_cmd.reply[0],raw_cmd.reply[1], raw_cmd.reply[2]);
 		fprintf(stderr, "Could not read sector %0X\n",
 			sectorinfo->sector);
 	}
+	return;
 }
 
 void init_trackinfo( Trackinfo *trackinfo, int track, int side ) {
@@ -417,31 +430,30 @@ ntracks) {
 		int k;
 		for (k=0; k<nsides; k++) 
 		{
-		int spt;
-		int side;
-		int ntrk;
+			int spt;
+			int side;
+			int ntrk;
 
-		ntrk = (i*nsides)+k;
-		side = (startside+k)%MAX_SIDES;
+			ntrk = (i*nsides)+k;
+			side = (startside+k)%MAX_SIDES;
 
-		init_trackinfo( &trackinfo[ntrk], i,k );
-		printtrackinfo(stderr, &trackinfo[ntrk]);
-		fprintf(stderr, "\n");
-		fprintf(stderr, " [");
+			init_trackinfo( &trackinfo[ntrk], i,k );
+			printtrackinfo(stderr, &trackinfo[ntrk]);
+			fprintf(stderr, "\n");
+			fprintf(stderr, " [");
 
-		seek(fd, drv,i);
-		spt = read_ids(fd, &trackinfo[ntrk],side,drv);
-		/* Slow version: Read sectors in order */
+			seek(fd, drv,i);
+			spt = read_ids(fd, &trackinfo[ntrk],side,drv);
+			/* Slow version: Read sectors in order */
 		
-		trackinfo->spt = spt;
-		for ( j=0; j<spt; j++ ) 
-		{
-			sectorinfo = &trackinfo[ntrk].sectorinfo[j];
-			fprintf(stderr, "%02X ", sectorinfo->sector);
-			read_sect(fd, &trackinfo[ntrk], 
-sectorinfo,sect, i,side,drv);
-			sect += (128<<trackinfo[ntrk].bps);
-		}
+			trackinfo->spt = spt;
+			for ( j=0; j<spt; j++ ) 
+			{
+				sectorinfo = &trackinfo[ntrk].sectorinfo[j];
+				fprintf(stderr, "%02X ", sectorinfo->sector);
+				read_sect(fd, &trackinfo[ntrk],sectorinfo,sect, i,side,drv);
+				sect += (128<<trackinfo[ntrk].bps);
+			}
 #if 0
 		trackinfo->spt = spt;
 		/* Fast version: Read sectors interleaved in two passes */
@@ -459,7 +471,7 @@ sectorinfo,sect, i,side,drv);
 			sect += 0x400;
 		}
 #endif
-		fprintf(stderr, "]\n");
+			fprintf(stderr, "]\n");
 		}
 	}
 
