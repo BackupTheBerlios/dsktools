@@ -1,4 +1,12 @@
-$Id: ChangeLog,v 1.4 2004/12/31 15:38:53 nurgle Exp $
+$Id: ChangeLog,v 1.5 2008/06/25 13:57:57 pulkomandy Exp $
+
+V0.2.2
+
+25.6.2008:
+- Added multiple try on reading and writing (PulkoMandy)
+- Writing to side B (François Lacombe)
+
+==============================================================================
 
 V0.2.1
 
