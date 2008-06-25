@@ -1,4 +1,4 @@
-/* $Id: dskwrite.c,v 1.6 2004/12/30 22:49:36 nurgle Exp $
+/* $Id: dskwrite.c,v 1.7 2008/06/25 08:19:10 pulkomandy Exp $
  *
  * dskwrite.c - Small utility to write CPC disk images to a floppy disk under
  * Linux with a standard PC FDC.
@@ -32,6 +32,8 @@
 #include <sys/time.h>
 #include <fcntl.h>
 
+#define MAX_RETRY 20
+
 /* notes:
  *
  * the C (track),H (head),R (sector id),N (sector size) parameters in the
@@ -39,7 +41,7 @@
  * physical side.
  */
 
-void format_track(int fd, int track, Trackinfo *trackinfo) {
+void format_track(int fd, int track, Trackinfo *trackinfo, unsigned char side) {
 
 	int i, err;
 	struct floppy_raw_cmd raw_cmd;
@@ -54,7 +56,7 @@ void format_track(int fd, int track, Trackinfo *trackinfo) {
 		data[i].sector = sectorinfo->sector;
 		data[i].size = sectorinfo->bps;
 		data[i].cylinder = sectorinfo->track;
-		data[i].head = sectorinfo->head;	
+		data[i].head = sectorinfo->head;
 		sectorinfo++;
 	}
 	//fprintf(stderr, "Formatting Track %i\n", track);
@@ -68,7 +70,7 @@ void format_track(int fd, int track, Trackinfo *trackinfo) {
 	raw_cmd.data  = data;
 
 	raw_cmd.cmd[raw_cmd.cmd_count++] = FD_FORMAT & mask;
-	raw_cmd.cmd[raw_cmd.cmd_count++] = 0;	/* head: 4 or 0 */	//FIXME - this is the physical side to read from
+	raw_cmd.cmd[raw_cmd.cmd_count++] = side;	/* head: 4 or 0 */
 	//raw_cmd.cmd[raw_cmd.cmd_count++] = 2;	/* sectorsize */
 	//raw_cmd.cmd[raw_cmd.cmd_count++] = 9;	/* sectors */
 	//raw_cmd.cmd[raw_cmd.cmd_count++] = 82;/* GAP */
@@ -96,7 +98,7 @@ void format_track(int fd, int track, Trackinfo *trackinfo) {
 
 //void write_sect(int fd, int track, unsigned char sector, unsigned char *data) {
 void write_sect(int fd, Trackinfo *trackinfo, Sectorinfo *sectorinfo,
-	unsigned char *data) {
+	unsigned char *data, unsigned char side) {
 
 	int i, err;
 	struct floppy_raw_cmd raw_cmd;
@@ -106,24 +108,11 @@ void write_sect(int fd, Trackinfo *trackinfo, Sectorinfo *sectorinfo,
 	init_raw_cmd(&raw_cmd);
 	raw_cmd.flags = FD_RAW_WRITE | FD_RAW_INTR;
 	raw_cmd.flags |= FD_RAW_NEED_SEEK;
-	//raw_cmd.track = track;
-	//raw_cmd.rate  = 2;	/* SD */
-	//raw_cmd.length= 512;	/* Sectorsize */
-	//raw_cmd.data  = data;
+
 	raw_cmd.track = sectorinfo->track;
 	raw_cmd.rate  = 2;	/* SD */
-	raw_cmd.length= (128<<(sectorinfo->bps));
+	raw_cmd.length= (128<<(sectorinfo->bps)); /* Sectorsize */
 	raw_cmd.data  = data;
-
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = FD_WRITE & mask;
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = 0;		/* head */
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = track;	/* track */
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = 0;		/* head */
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = sector;	/* sector */
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = 2;		/* sectorsize */
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = sector;	/* sector */
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = 82;	/* GPL */
-	//raw_cmd.cmd[raw_cmd.cmd_count++] = 0xFF;	/* DTL */
 
 	if (sectorinfo->unused1 & 0x040)
 	{
@@ -137,27 +126,38 @@ void write_sect(int fd, Trackinfo *trackinfo, Sectorinfo *sectorinfo,
 	}
 
 	// these parameters are same for "write data" and "write deleted data".
-	raw_cmd.cmd[raw_cmd.cmd_count++] = 0;			/* head */	//FIXME - this is the physical side to read from
+	raw_cmd.cmd[raw_cmd.cmd_count++] = side;		/* head */
 	raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->track;	/* track */
-	raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->head;	/* head */	
+	raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->head;	/* head */
 	raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->sector;	/* sector */
 	raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->bps;	/* sectorsize */
 	raw_cmd.cmd[raw_cmd.cmd_count++] = sectorinfo->sector;	/* sector */
 	raw_cmd.cmd[raw_cmd.cmd_count++] = trackinfo->gap;	/* GPL */
 	raw_cmd.cmd[raw_cmd.cmd_count++] = 0xFF;		/* DTL */
 
-	err = ioctl(fd, FDRAWCMD, &raw_cmd);
-	if (err < 0) {
+	char ok=0, retry=0;
+
+	do
+	{
+	    err = ioctl(fd, FDRAWCMD, &raw_cmd);
+	    if (err < 0) {
 		perror("Error writing");
 		exit(1);
-	}
-	if (raw_cmd.reply[0] & 0x40) {
-		fprintf(stderr, "Could not write sector %0X\n",
+	    }
+	    if (raw_cmd.reply[0] & 0x40) {
+		retry++;
+		if (retry>MAX_RETRY) ok=1;
+		recalibrate(fd, 0); //Force the head to move again
+	    }
+	    else ok=1;
+	}while (ok==0);
+
+	if (retry>MAX_RETRY)
+	    fprintf(stderr, "Could not write sector %0X\n",
 			sectorinfo->sector);
-	}
 }
 
-void writedsk(char *filename) {
+void writedsk(char *filename, unsigned char side) {
 
 	/* Variable declarations */
 	int fd, tmp, err;
@@ -242,7 +242,7 @@ void writedsk(char *filename) {
 			myabort("Error reading Track: File to short\n");
 
 		/* format track */
-		format_track(fd, i, &trackinfo);
+		format_track(fd, i, &trackinfo, side);
 
 		/* write track */
 		sect = track;
@@ -250,7 +250,7 @@ void writedsk(char *filename) {
 		fprintf(stderr, " [");
 		for (j=0; j<trackinfo.spt; j++) {
 			fprintf(stderr, "%0X ", sectorinfo->sector);
-			write_sect(fd, &trackinfo, sectorinfo, sect);
+			write_sect(fd, &trackinfo, sectorinfo, sect, side);
 			sectorinfo++;
 			sect += (128<<trackinfo.bps);
 		}
@@ -262,8 +262,17 @@ void writedsk(char *filename) {
 
 int main(int argc, char **argv) {
 
-	if (argc == 2) { writedsk(argv[1]);
-	} else { fprintf(stderr, "usage: dskwrite <filename>\n");
+	if (argc == 2)
+	{
+	    writedsk(argv[1],0);
+	}
+	else if( (argc==3) && (strcmp(argv[1],"b")==0) )
+	{
+	    writedsk(argv[1],4); //Write on side B
+	}
+	else
+	{
+	    fprintf(stderr, "usage: dskwrite [b] <filename>\n");
 	}
 	return 0;
 

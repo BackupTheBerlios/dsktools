@@ -1,4 +1,4 @@
-#$Id: Makefile,v 1.6 2003/08/24 19:53:38 nurgle Exp $
+#$Id: Makefile,v 1.7 2008/06/25 08:19:10 pulkomandy Exp $
 
 # build targets
 
@@ -28,3 +28,7 @@ dskwrite: dskwrite.c common.o
 
 common.o: common.c
 	gcc -g -c common.c
+
+# installation
+install:
+	cp dskwrite dskread /usr/local/bin
