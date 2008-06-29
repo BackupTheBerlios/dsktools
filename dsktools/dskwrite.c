@@ -1,4 +1,4 @@
-/* $Id: dskwrite.c,v 1.8 2008/06/25 13:55:28 pulkomandy Exp $
+/* $Id: dskwrite.c,v 1.9 2008/06/29 21:36:26 nurgle Exp $
  *
  * dskwrite.c - Small utility to write CPC disk images to a floppy disk under
  * Linux with a standard PC FDC.
@@ -137,23 +137,22 @@ void write_sect(int fd, Trackinfo *trackinfo, Sectorinfo *sectorinfo,
 
 	char ok=0, retry=0;
 
-	do
-	{
-	    err = ioctl(fd, FDRAWCMD, &raw_cmd);
-	    if (err < 0) {
-		perror("Error writing");
-		exit(1);
-	    }
-	    if (raw_cmd.reply[0] & 0x40) {
-		retry++;
-		if (retry>MAX_RETRY) ok=1;
-		recalibrate(fd, 0); //Force the head to move again
-	    }
-	    else ok=1;
-	}while (ok==0);
+	do {
+		err = ioctl(fd, FDRAWCMD, &raw_cmd);
+		if (err < 0) {
+			perror("Error writing");
+			exit(1);
+		}
+		if (raw_cmd.reply[0] & 0x40) {
+			retry++;
+			if (retry>MAX_RETRY) ok=1;
+			recalibrate(fd, 0); //Force the head to move again
+		}
+		else ok=1;
+	} while (ok==0);
 
 	if (retry>MAX_RETRY)
-	    fprintf(stderr, "Could not write sector %0X\n",
+		fprintf(stderr, "Could not write sector %0X\n",
 			sectorinfo->sector);
 }
 
@@ -262,17 +261,12 @@ void writedsk(char *filename, unsigned char side) {
 
 int main(int argc, char **argv) {
 
-	if (argc == 2)
-	{
-	    writedsk(argv[1],0);
-	}
-	else if( (argc==3) && (strcmp(argv[1],"b")==0) )
-	{
-	    writedsk(argv[2],4); //Write on side B
-	}
-	else
-	{
-	    fprintf(stderr, "usage: dskwrite [b] <filename>\n");
+	if (argc == 2) {
+		writedsk(argv[1],0);
+	} else if( (argc==3) && (strcmp(argv[1],"b")==0) ) {
+		writedsk(argv[2],4); //Write on side B
+	} else {
+		fprintf(stderr, "usage: dskwrite [b] <filename>\n");
 	}
 	return 0;
 

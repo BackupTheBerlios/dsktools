@@ -1,4 +1,4 @@
-/* $Id: dskread.c,v 1.7 2008/06/25 13:55:28 pulkomandy Exp $
+/* $Id: dskread.c,v 1.8 2008/06/29 21:36:26 nurgle Exp $
  *
  * dskread.c - Small utility to read CPC disk images from a floppy disk under
  * Linux with a standard PC FDC.
@@ -287,9 +287,7 @@ void read_sect(int fd, Trackinfo *trackinfo, Sectorinfo *sectorinfo,
 
 //	reset(fd);
 
-	do
-	{
-
+	do {
 		init_raw_cmd(&raw_cmd);
 		raw_cmd.flags = FD_RAW_READ | FD_RAW_INTR;
 		raw_cmd.track = track;
@@ -313,8 +311,7 @@ void read_sect(int fd, Trackinfo *trackinfo, Sectorinfo *sectorinfo,
 			exit(1);
 		}
 
-		if (((raw_cmd.reply[0] &0x0f8)==0x040) && (raw_cmd.reply[1]==0x080))
-		{
+		if (((raw_cmd.reply[0] &0x0f8)==0x040) && (raw_cmd.reply[1]==0x080)) {
 			/* end of cylinder */
 			return;
 		}
@@ -325,15 +322,13 @@ void read_sect(int fd, Trackinfo *trackinfo, Sectorinfo *sectorinfo,
 			fprintf(stderr,"TRY %d \n",retry);
 		}
 		else ok = 1; // Read ok, go to next
-	}while( (retry<10) && (ok == 0) );
+	} while((retry<10) && (ok == 0));
 
-	if(!ok)
-	{
+	if(!ok) {
 		printf("\n%02x %02x %02x\r\n",raw_cmd.reply[0],raw_cmd.reply[1], raw_cmd.reply[2]);
 		fprintf(stderr, "Could not read sector %0X\n",
 			sectorinfo->sector);
 	}
-	return;
 }
 
 void init_trackinfo( Trackinfo *trackinfo, int track, int side ) {
@@ -425,11 +420,9 @@ ntracks) {
 	init( fd, drv);
 
 	sect = data;
-	for ( i=0; i<ntracks; i++ ) 
-	{
+	for ( i=0; i<ntracks; i++ ) {
 		int k;
-		for (k=0; k<nsides; k++) 
-		{
+		for (k=0; k<nsides; k++) {
 			int spt;
 			int side;
 			int ntrk;
@@ -447,8 +440,7 @@ ntracks) {
 			/* Slow version: Read sectors in order */
 		
 			trackinfo->spt = spt;
-			for ( j=0; j<spt; j++ ) 
-			{
+			for ( j=0; j<spt; j++ ) {
 				sectorinfo = &trackinfo[ntrk].sectorinfo[j];
 				fprintf(stderr, "%02X ", sectorinfo->sector);
 				read_sect(fd, &trackinfo[ntrk],sectorinfo,sect, i,side,drv);

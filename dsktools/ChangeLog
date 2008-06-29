@@ -1,8 +1,12 @@
-$Id: ChangeLog,v 1.5 2008/06/25 13:57:57 pulkomandy Exp $
+$Id: ChangeLog,v 1.6 2008/06/29 21:36:26 nurgle Exp $
 
 V0.2.2
 
-25.6.2008:
+29.06.2008:
+- Minor code reformatting.
+- Adjust AUTHORS.
+
+25.06.2008:
 - Added multiple try on reading and writing (PulkoMandy)
 - Writing to side B (François Lacombe)
 

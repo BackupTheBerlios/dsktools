@@ -1,4 +1,4 @@
-$Id: AUTHORS,v 1.2 2003/08/24 19:42:18 nurgle Exp $
+$Id: AUTHORS,v 1.3 2008/06/29 21:36:26 nurgle Exp $
 
 dsktools developers and contributors
 ====================================
@@ -10,6 +10,14 @@ main programming
 various fixes, deleted tracks writing, major parts of dskread
 
   Kevin Thacker <KevinT@Core-Design.com>
+
+multiple try on reading and writing
+
+  PulkoMandy
+
+writing to side B
+
+  François Lacombe
 
 inspiration, suggestions and example code
 
