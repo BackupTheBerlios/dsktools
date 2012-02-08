@@ -1,4 +1,4 @@
-/* $Id: dskwrite.c,v 1.9 2008/06/29 21:36:26 nurgle Exp $
+/* $Id: dskwrite.c,v 1.10 2012/02/08 15:23:44 nurgle Exp $
  *
  * dskwrite.c - Small utility to write CPC disk images to a floppy disk under
  * Linux with a standard PC FDC.
@@ -215,7 +215,7 @@ void writedsk(char *filename, unsigned char side) {
 	tracklen = (diskinfo.tracklen[0] + diskinfo.tracklen[1]*256) - 0x100;
 
 	/*fprintf(stderr, "writing Track: ");*/
-	for (i=0; i<diskinfo.tracks; i++) {
+	for (i=0; i<diskinfo.tracks * diskinfo.heads; i++) {
 		/* read in track */
 		/*fprintf(stderr, "%2.2i ",i);
 		fflush(stderr);*/
@@ -233,6 +233,9 @@ void writedsk(char *filename, unsigned char side) {
 		if (strncmp(trackinfo.magic, magic_track, strlen(magic_track)))
 			myabort("Error reading Track-Info: Invalid Track-Info\n");
 
+		if (diskinfo.heads == 2) {
+			side = (trackinfo.head == 0) ? 0 : 4;
+		}
 		printtrackinfo(stderr, &trackinfo);
 
 		/* read track */
@@ -241,7 +244,7 @@ void writedsk(char *filename, unsigned char side) {
 			myabort("Error reading Track: File to short\n");
 
 		/* format track */
-		format_track(fd, i, &trackinfo, side);
+		format_track(fd, i/diskinfo.heads, &trackinfo, side);
 
 		/* write track */
 		sect = track;
