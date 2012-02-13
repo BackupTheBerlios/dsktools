@@ -1,4 +1,4 @@
-/* $Id: dskwrite.c,v 1.10 2012/02/08 15:23:44 nurgle Exp $
+/* $Id: dskwrite.c,v 1.11 2012/02/13 22:36:17 nurgle Exp $
  *
  * dskwrite.c - Small utility to write CPC disk images to a floppy disk under
  * Linux with a standard PC FDC.
@@ -233,9 +233,19 @@ void writedsk(char *filename, unsigned char side) {
 		if (strncmp(trackinfo.magic, magic_track, strlen(magic_track)))
 			myabort("Error reading Track-Info: Invalid Track-Info\n");
 
+		/* when 10 sectors per track should be written and gap size
+ 		 * greater 0x38 is given, reduce gap size to 0x2a to
+		 * make it work. */
+		if ((trackinfo.spt == 10) && (trackinfo.gap > 0x38)) {
+			trackinfo.gap = 0x2a;
+		}
+
+		/* use trackinfo.head to choose physical side for double
+		 * sided images only. */
 		if (diskinfo.heads == 2) {
 			side = (trackinfo.head == 0) ? 0 : 4;
 		}
+
 		printtrackinfo(stderr, &trackinfo);
 
 		/* read track */
